@@ -88,10 +88,11 @@ export default function Setup() {
 
   return (
     <div className="min-h-dvh pb-10">
-      <header className="mx-auto flex max-w-2xl items-center gap-3 px-5 py-5">
+      <header className="mx-auto flex max-w-2xl items-center gap-3 px-5 py-5 lg:max-w-5xl">
         <Logo />
       </header>
-      <main className="mx-auto max-w-2xl px-4">
+      <main className="mx-auto max-w-2xl px-4 lg:grid lg:max-w-5xl lg:grid-cols-[minmax(0,40rem)_1fr] lg:items-start lg:gap-14">
+<div className="min-w-0">
         <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
           <div>
             <h1 className="text-3xl font-extrabold tracking-tight sm:text-4xl">Set up a family</h1>
@@ -210,6 +211,8 @@ export default function Setup() {
               : <Button size="lg" className="flex-1" onClick={submit} busy={busy} data-testid="create">Create {f.parent_name ? `${f.parent_name}'s` : "the"} Bharosa</Button>}
           </div>
         </Card>
+      </div>
+        <Preview f={f} />
       </main>
     </div>
   );
@@ -299,5 +302,33 @@ function Success({ out, name }: { out: CreatedHousehold; name: string }) {
         </div>
       </main>
     </div>
+  );
+}
+
+/** Desktop-only side panel: shows what the guardian's phone will look like, updating as the form is filled. */
+function Preview({ f }: { f: Form }) {
+  const name = f.parent_name.trim() || "Lakshmi";
+  const said = { kn: "ಕರೆಂಟ್ ಬಿಲ್ ಕಟ್ಟಬೇಕು", hi: "बिजली का बिल भर दो", en: "Please pay the electricity bill" }[f.language];
+  const bill = f.bills[0]?.name.trim() || "electricity bill";
+  const limit = f.auto || 500;
+  return (
+    <aside className="sticky top-6 hidden lg:block" aria-hidden>
+      <p className="mb-3 text-sm font-bold uppercase tracking-wide text-muted">What {f.g_name.trim() || "you"} will see</p>
+      <div className="rounded-3xl border-2 border-saffron/60 bg-saffron-tint p-5 shadow-lift">
+        <div className="flex items-center gap-2 text-sm font-semibold text-saffron-ink"><Sparkles size={15} /> {name} is asking</div>
+        <div className="num mt-1 text-4xl font-extrabold tracking-tight">₹{(limit * 4 + 392).toLocaleString("en-IN")}</div>
+        <div className="font-semibold">Pay {bill}</div>
+        <p lang={f.language} className="mt-2 rounded-xl bg-white/70 px-3 py-2 text-[15px]">“{said}”</p>
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <span className="flex h-11 items-center justify-center rounded-xl bg-brand font-semibold text-white">Approve</span>
+          <span className="flex h-11 items-center justify-center rounded-xl border-2 border-line bg-card font-semibold">Decline</span>
+        </div>
+      </div>
+      <ul className="mt-5 space-y-2 text-[15px] text-muted">
+        <li>Anything up to <b className="text-ink">₹{limit.toLocaleString("en-IN")}</b> to someone you added runs by itself.</li>
+        <li>Bigger spends wait for your one tap.</li>
+        <li>Scam calls are refused and spending locks.</li>
+      </ul>
+    </aside>
   );
 }
