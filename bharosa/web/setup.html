@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bharosa · Set up a family</title>
+<link rel="stylesheet" href="/static/style.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%277%27 fill=%27%230f5c4d%27/%3E%3Ctext x=%2716%27 y=%2723%27 font-size=%2720%27 text-anchor=%27middle%27 fill=%27%23ffd59a%27 font-family=%27sans-serif%27 font-weight=%27700%27%3EB%3C/text%3E%3C/svg%3E">
+<style> main { max-width: 760px; } .item { display: grid; gap: 8px; grid-template-columns: 2fr 1fr 2fr 1fr 40px; align-items: end; }
+  .item.payee { grid-template-columns: 2fr 1.5fr 1.5fr 2fr 40px; } .x { padding: 10px 0; } h3 { margin: 18px 0 4px; font-size: 15px; } </style>
+</head>
+<body>
+<header class="top"><div class="logo">Bha<span>rosa</span></div><div class="sub">Set up a family · takes 3 minutes</div></header>
+<main>
+  <form class="card" id="form" onsubmit="return submitForm(event)">
+    <div class="row"><button type="button" class="btn-ghost" style="flex:0" onclick="fillDemo()">Fill with demo data</button></div>
+    <h3>Parent</h3>
+    <div class="row">
+      <div><label>Name</label><input id="parent_name" required placeholder="Lakshmi"></div>
+      <div><label>Speaks</label><select id="language"><option value="kn">Kannada</option><option value="hi">Hindi</option><option value="en">English</option></select></div>
+      <div><label>Phone (for call-backs, +91…)</label><input id="parent_phone" placeholder="+9198…"></div>
+    </div>
+    <h3>Guardian (you)</h3>
+    <div class="row">
+      <div><label>Name</label><input id="g_name" required placeholder="Ravi"></div>
+      <div><label>Relation</label><input id="g_relation" value="son"></div>
+      <div><label>Phone (SMS alerts, optional)</label><input id="g_phone" placeholder="+9198…"></div>
+    </div>
+    <label>Push alerts: install the free <a href="https://ntfy.sh" target="_blank">ntfy</a> app, subscribe to a hard-to-guess topic, and enter it here</label>
+    <input id="g_ntfy" placeholder="e.g. bharosa-ravi-7f3k2">
+    <h3>Pharmacy</h3>
+    <div class="row">
+      <div><label>Name</label><input id="ph_name" placeholder="Sri Sai Medicals"></div>
+      <div><label>Phone</label><input id="ph_phone" placeholder="+9180…"></div>
+      <div><label>Delivery note</label><input id="ph_note" placeholder="Jayanagar 4th Block, near the temple"></div>
+    </div>
+    <h3>Usual medicines</h3>
+    <div class="muted">Name · what it's for · words the parent uses (comma separated) · price per tablet (₹)</div>
+    <div id="meds"></div>
+    <button type="button" class="btn-ghost" onclick="addMed()">+ Add medicine</button>
+    <h3>Known bills</h3>
+    <div class="muted">Name · biller · consumer number · words the parent uses</div>
+    <div id="payees"></div>
+    <button type="button" class="btn-ghost" onclick="addPayee()">+ Add bill</button>
+    <h3>Limits</h3>
+    <div class="row">
+      <div><label>Auto-approve up to (₹)</label><input id="auto" type="number" value="500"></div>
+      <div><label>Monthly auto budget (₹)</label><input id="budget" type="number" value="3000"></div>
+      <div><label>Refuse above (₹)</label><input id="cap" type="number" value="10000"></div>
+    </div>
+    <label>Admin token (only if this server requires one)</label><input id="admin" placeholder="optional">
+    <div style="margin-top:16px"><button class="btn-primary big" type="submit">Create</button></div>
+  </form>
+  <div class="card" id="done" hidden></div>
+</main>
+<script>
+const BILLERS = {BESCOM: "BESCOM electricity", BWSSB: "BWSSB water", INDANE: "Indane gas", AIRTEL_POSTPAID: "Airtel postpaid", JIO_FIBER: "JioFiber", BBMP_TAX: "BBMP property tax"};
+const CAT = {BESCOM: "electricity", BWSSB: "water", INDANE: "gas", AIRTEL_POSTPAID: "mobile", JIO_FIBER: "broadband", BBMP_TAX: "tax"};
+const $ = id => document.getElementById(id);
+function esc(s) { return String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+function addMed(m = {}) {
+  const d = document.createElement("div"); d.className = "item med";
+  d.innerHTML = `<input placeholder="Telmisartan 40mg" value="${esc(m.name || "")}"><input placeholder="BP" value="${esc(m.purpose || "")}">
+    <input placeholder="bp, ಬಿಪಿ" value="${esc((m.aliases || []).join(", "))}"><input type="number" placeholder="6" value="${m.unit_price ?? ""}">
+    <button type="button" class="btn-ghost x" onclick="this.parentNode.remove()">✕</button>`;
+  $("meds").appendChild(d);
+}
+function addPayee(p = {}) {
+  const d = document.createElement("div"); d.className = "item payee";
+  d.innerHTML = `<input placeholder="BESCOM electricity" value="${esc(p.name || "")}">
+    <select>${Object.entries(BILLERS).map(([k, v]) => `<option value="${k}" ${p.biller_id === k ? "selected" : ""}>${v}</option>`).join("")}</select>
+    <input placeholder="Consumer no." value="${esc(p.consumer_number || "")}"><input placeholder="current bill, ಕರೆಂಟ್ ಬಿಲ್" value="${esc((p.aliases || []).join(", "))}">
+    <button type="button" class="btn-ghost x" onclick="this.parentNode.remove()">✕</button>`;
+  $("payees").appendChild(d);
+}
+function fillDemo() {
+  $("parent_name").value = "Lakshmi"; $("language").value = "kn"; $("g_name").value = "Ravi";
+  $("ph_name").value = "Sri Sai Medicals"; $("ph_note").value = "Jayanagar 4th Block, near the temple";
+  $("meds").innerHTML = ""; $("payees").innerHTML = "";
+  addMed({name: "Telmisartan 40mg", purpose: "BP", aliases: ["bp", "ಬಿಪಿ", "बीपी"], unit_price: 6});
+  addMed({name: "Metformin 500mg", purpose: "sugar", aliases: ["sugar", "ಶುಗರ್", "शुगर"], unit_price: 3});
+  addPayee({name: "BESCOM electricity", biller_id: "BESCOM", consumer_number: "7A4521909", aliases: ["current bill", "ಕರೆಂಟ್ ಬಿಲ್"]});
+  addPayee({name: "BWSSB water", biller_id: "BWSSB", consumer_number: "WS0098123", aliases: ["water bill", "ನೀರಿನ ಬಿಲ್"]});
+  addPayee({name: "Indane gas", biller_id: "INDANE", consumer_number: "IN55310022", aliases: ["gas", "ಗ್ಯಾಸ್"]});
+}
+const list = s => s.split(",").map(x => x.trim()).filter(Boolean);
+async function submitForm(e) {
+  e.preventDefault();
+  const medicines = [...document.querySelectorAll(".med")].map((d, i) => { const v = d.querySelectorAll("input");
+    return {id: "med" + (i + 1), name: v[0].value, purpose: v[1].value, aliases: list(v[2].value), unit_price: parseInt(v[3].value || "5", 10), qty_per_order: 30}; }).filter(m => m.name);
+  const payees = [...document.querySelectorAll(".payee")].map((d, i) => { const v = d.querySelectorAll("input"), b = d.querySelector("select").value;
+    return {id: "bill" + (i + 1), name: v[0].value || BILLERS[b], biller_id: b, consumer_number: v[1].value, category: CAT[b], aliases: list(v[2].value)}; }).filter(p => p.consumer_number);
+  const body = {parent_name: $("parent_name").value, language: $("language").value, parent_phone: $("parent_phone").value,
+    guardian: {name: $("g_name").value, relation: $("g_relation").value, phone: $("g_phone").value, ntfy_topic: $("g_ntfy").value},
+    pharmacy: {name: $("ph_name").value || "Neighbourhood Pharmacy", phone: $("ph_phone").value, address_note: $("ph_note").value},
+    medicines, payees, policy: {auto_spend_limit: +$("auto").value, monthly_auto_budget: +$("budget").value, hard_cap: +$("cap").value}};
+  const r = await fetch("/api/households", {method: "POST", headers: {"Content-Type": "application/json", ...($("admin").value ? {"X-Admin-Token": $("admin").value} : {})}, body: JSON.stringify(body)});
+  const out = await r.json();
+  if (!r.ok) { alert(out.detail || "Could not create"); return false; }
+  $("form").hidden = true; $("done").hidden = false;
+  const row = (label, v, open) => `<label>${label}</label><div class="copy"><code>${esc(v)}</code><button class="btn-ghost" onclick="navigator.clipboard.writeText('${esc(v)}')">Copy</button>${open ? `<a class="btn btn-primary" target="_blank" href="${esc(v)}">Open</a>` : ""}</div>`;
+  $("done").innerHTML = `<h2>✔ ${esc(body.parent_name)}'s Bharosa is ready</h2>
+    <div class="banner warn">Save these links now. They are shown once, and anyone who has them can use them.</div>
+    ${row("Guardian dashboard (bookmark on your phone)", out.guardian_dashboard, true)}
+    ${row("Parent line simulator (test without a phone number)", out.parent_simulator, true)}
+    ${row("MCP server URL for the ElevenLabs voice agent", out.parent_mcp_url)}
+    ${row("Read-only MCP URL for your own assistant (e.g. Claude)", out.guardian_mcp_url)}`;
+  return false;
+}
+addMed(); addPayee();
+</script>
+</body>
+</html>

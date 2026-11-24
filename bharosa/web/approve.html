@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bharosa · Approve?</title>
+<link rel="stylesheet" href="/static/style.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%277%27 fill=%27%230f5c4d%27/%3E%3Ctext x=%2716%27 y=%2723%27 font-size=%2720%27 text-anchor=%27middle%27 fill=%27%23ffd59a%27 font-family=%27sans-serif%27 font-weight=%27700%27%3EB%3C/text%3E%3C/svg%3E">
+<style> main { max-width: 520px; } .amt { font-size: 40px; font-weight: 800; margin: 6px 0; } </style>
+</head>
+<body>
+<header class="top"><div class="logo">Bha<span>rosa</span></div><div class="sub">Approval request</div></header>
+<main>
+  <div class="card" id="card"><div class="empty">Loading…</div></div>
+</main>
+<script>
+const [, , hh, aid] = location.pathname.split("/");
+const t = new URLSearchParams(location.search).get("t") || "";
+function esc(s) { return String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+const card = document.getElementById("card");
+
+async function load() {
+  const r = await fetch(`/api/approval/${hh}/${aid}?t=${encodeURIComponent(t)}`);
+  if (!r.ok) { card.innerHTML = `<h2>This link isn't valid</h2><p class="muted">It may have been mistyped. Open your Bharosa dashboard instead.</p>`; return; }
+  const a = await r.json();
+  const done = a.status !== "pending_approval";
+  const label = {completed: "✔ Approved and done", denied: "Declined", expired: "Expired (no reply in time)",
+                 blocked: "Blocked (spending was paused or scam-locked)", awaiting_pharmacy: "✔ Approved · calling the pharmacy", failed: "Approved, but it failed"}[a.status] || a.status;
+  card.innerHTML = `
+    <div class="muted">${esc(a.parent)} is asking</div>
+    <h2 style="font-size:20px;margin:6px 0">${esc(a.title)}</h2>
+    ${a.amount ? `<div class="amt">₹${Number(a.amount).toLocaleString("en-IN")}</div>` : ""}
+    ${a.parent_said ? `<p style="font-style:italic">“${esc(a.parent_said)}”</p>` : ""}
+    <div class="muted">Why you're being asked:</div>
+    <ul>${a.reasons.map(x => `<li>${esc(x)}</li>`).join("")}</ul>
+    ${a.risk_score >= 0.35 ? `<div class="banner warn">⚠ Possible scam signals: ${esc(a.risk_signals.join(" · "))}. Call ${esc(a.parent)} before approving.</div>` : ""}
+    ${done ? `<div class="banner ${a.status === "completed" || a.status === "awaiting_pharmacy" ? "warn" : "bad"}" style="${a.status === "completed" ? "background:var(--ok-2);color:var(--ok);border:0" : ""}">${label}</div>` :
+    `<div class="row" style="margin-top:14px">
+       <button class="btn-ok big" onclick="decide('approve')">Approve</button>
+       <button class="btn-ghost big" onclick="decide('deny')">Decline</button>
+     </div>
+     <p class="muted">${esc(a.parent)} gets a call back with your answer.</p>`}`;
+}
+async function decide(decision) {
+  card.querySelectorAll("button").forEach(b => b.disabled = true);
+  const r = await fetch(`/api/approval/${hh}/${aid}`, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({t, decision})});
+  if (!r.ok) { const b = await r.json().catch(() => ({})); alert(b.detail || "Could not record your answer"); }
+  load();
+}
+load();
+</script>
+</body>
+</html>

@@ -1,0 +1,33 @@
+"""Persistence. Two interchangeable backends behind one small interface:
+
+* SQLiteStore  - local dev, demos, a single small server
+* DynamoStore  - AWS (single-table design, on-demand billing)
+"""
+from __future__ import annotations
+
+from typing import Protocol
+
+from ..config import settings
+from ..models import Action, Event, Household
+
+
+class Store(Protocol):
+    def put_household(self, hh: Household) -> None: ...
+    def get_household(self, household_id: str) -> Household | None: ...
+    def list_households(self) -> list[Household]: ...
+    def put_token(self, token_hash: str, household_id: str, role: str) -> None: ...
+    def resolve_token(self, token_hash: str) -> tuple[str, str] | None: ...
+    def put_action(self, action: Action) -> None: ...
+    def get_action(self, household_id: str, action_id: str) -> Action | None: ...
+    def list_actions(self, household_id: str, limit: int = 200) -> list[Action]: ...
+    def add_event(self, event: Event) -> None: ...
+    def list_events(self, household_id: str, limit: int = 100) -> list[Event]: ...
+
+
+def make_store() -> Store:
+    s = settings()
+    if s.store == "dynamodb":
+        from .dynamo import DynamoStore
+        return DynamoStore(s.dynamodb_table, s.aws_region)
+    from .sqlite import SQLiteStore
+    return SQLiteStore(s.sqlite_path)

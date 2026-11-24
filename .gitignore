@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+*.pyc
+*.db
+*.db-*
+.env
+.pytest_cache/
+
+# frontend
+node_modules/
+bharosa/web/dist/
+frontend/test-results/
+frontend/playwright-report/

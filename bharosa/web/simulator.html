@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bharosa · Parent line</title>
+<link rel="stylesheet" href="/static/style.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%277%27 fill=%27%230f5c4d%27/%3E%3Ctext x=%2716%27 y=%2723%27 font-size=%2720%27 text-anchor=%27middle%27 fill=%27%23ffd59a%27 font-family=%27sans-serif%27 font-weight=%27700%27%3EB%3C/text%3E%3C/svg%3E">
+<style>
+  main { max-width: 980px; }
+  .phone { max-width: 400px; margin: 0 auto; background: #10201c; border-radius: 34px; padding: 14px; box-shadow: 0 20px 50px rgba(0,0,0,.25); }
+  .screen { background: #fbfaf7; border-radius: 24px; height: 640px; display: flex; flex-direction: column; overflow: hidden; }
+  .bar2 { background: var(--brand); color: #fff; padding: 14px 16px; font-weight: 700; display: flex; justify-content: space-between; }
+  .chat { flex: 1; overflow: auto; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+  .b { max-width: 85%; padding: 10px 12px; border-radius: 14px; font-size: 16px; }
+  .b.me { align-self: flex-end; background: var(--brand-2); }
+  .b.bot { align-self: flex-start; background: #fff; border: 1px solid var(--line); }
+  .b .tag { display: block; font-size: 11px; color: var(--muted); margin-top: 4px; font-family: ui-monospace, monospace; }
+  .b.call { background: var(--saffron-2); border: 1px solid #f3cf9b; }
+  .input { display: flex; gap: 8px; padding: 10px; border-top: 1px solid var(--line); background: #fff; }
+  .mic { width: 52px; height: 52px; border-radius: 50%; font-size: 22px; padding: 0; flex: 0 0 52px; }
+  .mic.on { background: var(--danger); animation: pulse 1s infinite; }
+  @keyframes pulse { 50% { transform: scale(1.08); } }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip { background: #fff; border: 1px solid var(--line); border-radius: 999px; padding: 8px 12px; font-size: 14px; cursor: pointer; font-weight: 500; }
+  .chip.risky { border-color: #f0b4ae; background: var(--danger-2); }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="logo">Bha<span>rosa</span></div><div class="sub">Parent line simulator</div>
+  <div style="flex:1"></div><a class="btn btn-ghost" style="color:#fff;border-color:#ffffff55" href="/g" target="_blank">Open guardian dashboard ↗</a>
+</header>
+<main>
+  <div id="nokey" class="card" hidden>
+    <h2>Open the parent link</h2>
+    <p class="muted">Use the private parent link from setup (<code>/p#bp_…</code>) or paste the key:</p>
+    <div class="row"><input id="keyin" placeholder="bp_…"><button class="btn-primary" style="flex:0" onclick="useKey()">Open</button></div>
+  </div>
+  <div id="app" class="grid two" hidden>
+    <div class="phone"><div class="screen">
+      <div class="bar2"><span id="pname">…</span><span id="lang" style="font-weight:400"></span></div>
+      <div class="chat" id="chat"></div>
+      <div class="input">
+        <button class="btn-primary mic" id="mic" title="Speak" onclick="toggleMic()">🎙</button>
+        <input id="text" placeholder="Speak or type…" onkeydown="if(event.key==='Enter')send()">
+        <button class="btn-primary" style="flex:0" onclick="send()">Send</button>
+      </div>
+    </div></div>
+    <div>
+      <div class="card">
+        <h2>Try saying</h2>
+        <div class="chips" id="chips"></div>
+        <p class="muted" style="margin-top:12px">This simulator uses an offline keyword router instead of the LLM, and calls exactly the same
+          tools the ElevenLabs voice agent calls over MCP. Watch the guardian dashboard update in another tab.</p>
+      </div>
+      <div class="card" style="margin-top:16px" id="elcard" hidden>
+        <h2>🔊 Talk to the real voice agent</h2>
+        <p class="muted">The ElevenLabs agent below is connected to this household's MCP endpoint.</p>
+        <div id="elwidget"></div>
+      </div>
+      <div class="card" style="margin-top:16px">
+        <h2>How it works</h2>
+        <ol class="muted" style="padding-left:18px;margin:0">
+          <li>The parent speaks: phone call, WhatsApp, or this page.</li>
+          <li>The agent calls a Bharosa MCP tool.</li>
+          <li>The policy engine decides: do it, ask the guardian, or refuse.</li>
+          <li>Approvals reach the guardian's phone; the parent gets a call back.</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+</main>
+<script>
+const KEY_STORE = "bharosa_parent_key";
+let key = (location.hash || "").replace(/^#/, "") || localStorage.getItem(KEY_STORE) || "";
+let info = null, seen = new Set(), rec = null, listening = false;
+const LOCALE = {kn: "kn-IN", hi: "hi-IN", en: "en-IN"};
+const CHIPS = {
+  kn: g => ["ನನ್ನ BP ಮಾತ್ರೆ ಮುಗಿಯುತ್ತಾ ಬಂತು", "ಕರೆಂಟ್ ಬಿಲ್ ಎಷ್ಟು?", "ಕರೆಂಟ್ ಬಿಲ್ ಕಟ್ಟಬೇಕು", "!CBI ಇಂದ ಫೋನ್ ಬಂತು, ದುಡ್ಡು ಕಳಿಸಬೇಕಂತೆ", `${g}ಗೆ ಸಂಜೆ ಕಾಲ್ ಮಾಡಲು ಹೇಳಿ`, "ಏನಾಯ್ತು?"],
+  hi: g => ["मेरी BP की गोली ख़त्म होने वाली है", "बिजली का बिल कितना है?", "बिजली का बिल भर दो", "!किसी ने फोन किया, बोले CBI से हैं, गिरफ्तार कर लेंगे, पैसे भेजो", `${g} को बता दो शाम को फोन करे`, "क्या हुआ?"],
+  en: g => ["My BP tablets are running out", "How much is the electricity bill?", "Please pay the electricity bill", "!Someone called from CBI saying I will be arrested unless I transfer money", `Tell ${g} to call me tonight`, "What happened to my request?"],
+};
+function esc(s) { return String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+async function api(path, opts = {}) {
+  const r = await fetch(path, {...opts, headers: {"Content-Type": "application/json", "X-Bharosa-Key": key}});
+  if (r.status === 401) { localStorage.removeItem(KEY_STORE); showNoKey(); throw new Error("unauthorized"); }
+  return r.json();
+}
+function showNoKey() { document.getElementById("nokey").hidden = false; document.getElementById("app").hidden = true; }
+function useKey() { key = document.getElementById("keyin").value.trim(); init(); }
+function bubble(cls, html) { const c = document.getElementById("chat"); const d = document.createElement("div"); d.className = "b " + cls; d.innerHTML = html; c.appendChild(d); c.scrollTop = c.scrollHeight; }
+function speak(text) {
+  if (!("speechSynthesis" in window) || !text) return;
+  const u = new SpeechSynthesisUtterance(text); u.lang = LOCALE[info.language]; u.rate = 0.95;
+  speechSynthesis.cancel(); speechSynthesis.speak(u);
+}
+async function send(textArg) {
+  const box = document.getElementById("text"); const text = (textArg ?? box.value).trim(); if (!text) return;
+  box.value = ""; bubble("me", esc(text));
+  const r = await api("/api/sim/say", {method: "POST", body: JSON.stringify({text})});
+  bubble("bot", esc(r.reply) + (r.tool ? `<span class="tag">→ ${esc(r.tool)} · ${esc(r.result.status || "")}</span>` : ""));
+  speak(r.reply);
+}
+async function poll() {
+  try { info = await api("/api/sim/state"); } catch (e) { return; }
+  for (const c of info.callbacks.slice().reverse()) {
+    if (seen.has(c.id)) continue; seen.add(c.id);
+    if (!window._first) continue;
+    const msg = c.message.replace(/^Called .*? back: “/, "").replace(/”$/, "");
+    bubble("call", "📞 <b>Bharosa is calling back</b><br>" + esc(msg)); speak(msg);
+  }
+  window._first = true;
+}
+function toggleMic() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { alert("Speech input needs Chrome or Edge. You can type instead."); return; }
+  if (listening) { rec.stop(); return; }
+  rec = new SR(); rec.lang = LOCALE[info.language]; rec.interimResults = false; rec.maxAlternatives = 1;
+  rec.onresult = e => send(e.results[0][0].transcript);
+  rec.onend = () => { listening = false; document.getElementById("mic").classList.remove("on"); };
+  rec.onerror = () => {};
+  listening = true; document.getElementById("mic").classList.add("on"); rec.start();
+}
+async function init() {
+  if (!key) return showNoKey();
+  try { await poll(); } catch (e) { return; }
+  localStorage.setItem(KEY_STORE, key);
+  if (location.hash) history.replaceState(null, "", location.pathname);
+  document.getElementById("nokey").hidden = true; document.getElementById("app").hidden = false;
+  document.getElementById("pname").textContent = info.parent_name + "'s phone";
+  document.getElementById("lang").textContent = {kn: "ಕನ್ನಡ", hi: "हिन्दी", en: "English"}[info.language];
+  document.getElementById("chips").innerHTML = CHIPS[info.language](info.guardian).map(t => {
+    const risky = t.startsWith("!"); const s = risky ? t.slice(1) : t;
+    return `<button class="chip ${risky ? "risky" : ""}" data-t="${esc(s)}">${risky ? "⚠ " : ""}${esc(s)}</button>`;
+  }).join("");
+  document.querySelectorAll(".chip").forEach(b => b.onclick = () => send(b.dataset.t));
+  bubble("bot", {kn: `ನಮಸ್ಕಾರ ${esc(info.parent_name)}. ನಾನು ಭರೋಸಾ. ಏನು ಸಹಾಯ ಬೇಕು?`, hi: `नमस्ते ${esc(info.parent_name)}। मैं भरोसा हूँ। क्या मदद चाहिए?`, en: `Hello ${esc(info.parent_name)}, this is Bharosa. How can I help?`}[info.language]);
+  if (info.elevenlabs_agent_id) {
+    document.getElementById("elcard").hidden = false;
+    document.getElementById("elwidget").innerHTML = `<elevenlabs-convai agent-id="${esc(info.elevenlabs_agent_id)}"></elevenlabs-convai>`;
+    const s = document.createElement("script"); s.src = "https://unpkg.com/@elevenlabs/convai-widget-embed"; s.async = true; document.body.appendChild(s);
+  }
+  setInterval(poll, 3000);
+}
+init();
+</script>
+</body>
+</html>

@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bharosa · Guardian</title>
+<link rel="stylesheet" href="/static/style.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%277%27 fill=%27%230f5c4d%27/%3E%3Ctext x=%2716%27 y=%2723%27 font-size=%2720%27 text-anchor=%27middle%27 fill=%27%23ffd59a%27 font-family=%27sans-serif%27 font-weight=%27700%27%3EB%3C/text%3E%3C/svg%3E">
+</head>
+<body>
+<header class="top">
+  <div class="logo">Bha<span>rosa</span></div>
+  <div class="sub" id="who">Guardian dashboard</div>
+  <div style="flex:1"></div>
+  <span class="pill ok" id="status">…</span>
+</header>
+<main>
+  <div id="nokey" class="card" hidden>
+    <h2>Open your guardian link</h2>
+    <p class="muted">This page needs the private guardian link you got at setup (it looks like <code>/g#bg_…</code>).
+      Paste the key here if you have it:</p>
+    <div class="row"><input id="keyin" placeholder="bg_…"><button class="btn-primary" style="flex:0" onclick="useKey()">Open</button></div>
+  </div>
+
+  <div id="app" hidden>
+    <div id="banner"></div>
+    <div class="grid two">
+      <div>
+        <div class="card">
+          <h2>⏳ Waiting for you <span class="pill warn" id="pcount">0</span></h2>
+          <div id="pending"><div class="empty">Nothing waiting. Small, known spends happen automatically.</div></div>
+        </div>
+        <div class="card" style="margin-top:16px">
+          <h2>🕑 What happened</h2>
+          <ul class="timeline" id="timeline"></ul>
+        </div>
+      </div>
+      <div>
+        <div class="card">
+          <h2>🛡 Safety</h2>
+          <div class="row" style="margin-bottom:10px">
+            <button id="freezeBtn" class="btn-danger big" onclick="toggleFreeze()">Pause all spending</button>
+          </div>
+          <div id="lockbox"></div>
+          <p class="muted" style="margin:8px 0 0">Pausing blocks every payment and order immediately, even ones you approve later.</p>
+        </div>
+        <div class="card" style="margin-top:16px">
+          <h2>💰 This month</h2>
+          <div class="row"><div><b id="spent">₹0</b> <span class="muted">auto-approved of</span> <b id="budget">₹0</b></div></div>
+          <div class="bar" style="margin-top:8px"><div id="spentbar" style="width:0%"></div></div>
+        </div>
+        <div class="card" style="margin-top:16px">
+          <h2>⚙ Limits</h2>
+          <label>Auto-approve a single spend up to (₹)</label><input id="auto_spend_limit" type="number" min="0">
+          <label>Auto-approved total per month (₹)</label><input id="monthly_auto_budget" type="number" min="0">
+          <label>Refuse anything above (₹)</label><input id="hard_cap" type="number" min="0">
+          <label>Lock spending after a scam warning for (minutes)</label><input id="scam_lock_minutes" type="number" min="5">
+          <div style="margin-top:12px"><button class="btn-primary" onclick="saveLimits()">Save limits</button></div>
+        </div>
+        <div class="card" style="margin-top:16px">
+          <h2>👵 Profile</h2>
+          <div id="profile" class="muted"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+<div class="toast" id="toast"></div>
+<script>
+const KEY_STORE = "bharosa_guardian_key";
+let key = (location.hash || "").replace(/^#/, "") || localStorage.getItem(KEY_STORE) || "";
+let state = null;
+
+function toast(msg) { const t = document.getElementById("toast"); t.textContent = msg; t.classList.add("show"); setTimeout(() => t.classList.remove("show"), 2200); }
+function esc(s) { return String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+function rupees(n) { return "₹" + Number(n || 0).toLocaleString("en-IN"); }
+function hhmm(ts) { const d = new Date(ts * 1000); const today = new Date().toDateString() === d.toDateString();
+  return (today ? "" : d.toLocaleDateString("en-IN", {day: "numeric", month: "short"}) + " ") + d.toLocaleTimeString("en-IN", {hour: "2-digit", minute: "2-digit"}); }
+
+async function api(path, opts = {}) {
+  const r = await fetch(path, {...opts, headers: {"Content-Type": "application/json", "X-Bharosa-Key": key, ...(opts.headers || {})}});
+  if (r.status === 401) { localStorage.removeItem(KEY_STORE); showNoKey(); throw new Error("unauthorized"); }
+  const body = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(body.detail || r.statusText);
+  return body;
+}
+
+function showNoKey() { document.getElementById("nokey").hidden = false; document.getElementById("app").hidden = true; }
+function useKey() { key = document.getElementById("keyin").value.trim(); localStorage.setItem(KEY_STORE, key); location.hash = ""; load(); }
+
+async function load() {
+  if (!key) return showNoKey();
+  try { state = await api("/api/state"); } catch (e) { return; }
+  localStorage.setItem(KEY_STORE, key);
+  if (location.hash) history.replaceState(null, "", location.pathname);   // keep the key out of screenshots
+  document.getElementById("nokey").hidden = true; document.getElementById("app").hidden = false;
+  render();
+}
+
+function render() {
+  const hh = state.household, p = state.policy;
+  document.getElementById("who").textContent = `${hh.guardian.name} · looking after ${hh.parent_name}`;
+  const st = document.getElementById("status"), banner = document.getElementById("banner");
+  if (p.frozen) { st.className = "pill bad"; st.textContent = "Spending paused"; }
+  else if (state.scam_lock_minutes_left) { st.className = "pill bad"; st.textContent = `Scam lock · ${state.scam_lock_minutes_left} min`; }
+  else { st.className = "pill ok"; st.textContent = "Active"; }
+  const urgent = state.events.find(e => e.type === "scam_alert" && Date.now() / 1000 - e.ts < 3 * 3600);
+  banner.innerHTML = urgent && state.scam_lock_minutes_left
+    ? `<div class="banner bad">${esc(urgent.summary)} <br><span style="font-weight:400">Call ${esc(hh.parent_name)} now${hh.parent_phone ? ` on <a style="color:#fff" href="tel:${esc(hh.parent_phone)}">${esc(hh.parent_phone)}</a>` : ""}. Cyber-fraud helpline: <a style="color:#fff" href="tel:1930">1930</a>.</span></div>` : "";
+
+  const fb = document.getElementById("freezeBtn");
+  fb.textContent = p.frozen ? "Resume spending" : "Pause all spending";
+  fb.className = (p.frozen ? "btn-ok" : "btn-danger") + " big";
+  document.getElementById("lockbox").innerHTML = state.scam_lock_minutes_left
+    ? `<div class="row"><span class="muted">Scam lock active for ${state.scam_lock_minutes_left} more min.</span><button class="btn-ghost" style="flex:0" onclick="clearLock()">Lift lock</button></div>` : "";
+
+  document.getElementById("pcount").textContent = state.pending.length;
+  document.getElementById("pending").innerHTML = state.pending.length ? state.pending.map(a => `
+    <div class="pending ${a.risk_score >= 0.35 ? "risky" : ""}">
+      <div class="title">${esc(a.title)}</div>
+      ${a.parent_said ? `<div class="said">${esc(hh.parent_name)} said: “${esc(a.parent_said)}”</div>` : ""}
+      <div class="muted">Why you're being asked:</div>
+      <ul>${(a.decision?.reasons || []).map(r => `<li>${esc(r)}</li>`).join("")}</ul>
+      ${a.risk_signals?.length ? `<div class="muted">Scam signals: ${esc(a.risk_signals.join(" · "))}</div>` : ""}
+      <div class="row" style="margin-top:10px">
+        <button class="btn-ok big" onclick="decide('${a.id}','approve')">Approve</button>
+        <button class="btn-ghost big" onclick="decide('${a.id}','deny')">Decline</button>
+      </div>
+      <div class="muted" style="margin-top:6px">Requested ${hhmm(a.created_at)}${a.expires_at ? ` · expires ${hhmm(a.expires_at)}` : ""}</div>
+    </div>`).join("") : `<div class="empty">Nothing waiting. Small, known spends happen automatically.</div>`;
+
+  document.getElementById("timeline").innerHTML = state.events.map(e =>
+    `<li class="${e.severity}"><span class="t">${hhmm(e.ts)}</span><span class="s">${esc(e.summary)}</span></li>`).join("");
+
+  document.getElementById("spent").textContent = rupees(state.spent_this_month);
+  document.getElementById("budget").textContent = rupees(p.monthly_auto_budget);
+  document.getElementById("spentbar").style.width = Math.min(100, 100 * state.spent_this_month / Math.max(1, p.monthly_auto_budget)) + "%";
+  for (const f of ["auto_spend_limit", "monthly_auto_budget", "hard_cap", "scam_lock_minutes"]) {
+    const el = document.getElementById(f); if (document.activeElement !== el) el.value = p[f];
+  }
+  const lang = {kn: "Kannada", hi: "Hindi", en: "English"}[hh.parent_language];
+  document.getElementById("profile").innerHTML = `
+    <div><b>${esc(hh.parent_name)}</b> · speaks ${lang}${hh.parent_phone ? " · " + esc(hh.parent_phone) : ""}</div>
+    <div style="margin-top:6px"><b>Pharmacy:</b> ${esc(hh.pharmacy.name)}</div>
+    <div style="margin-top:6px"><b>Medicines:</b> ${hh.medicines.map(m => esc(m.name) + (m.purpose ? ` (${esc(m.purpose)})` : "")).join(", ") || "—"}</div>
+    <div style="margin-top:6px"><b>Known bills:</b> ${hh.payees.map(x => esc(x.name)).join(", ") || "—"}</div>
+    <div style="margin-top:6px"><b>Push alerts:</b> ${hh.guardian.ntfy_topic ? "ntfy topic <code>" + esc(hh.guardian.ntfy_topic) + "</code>" : "not set up"}</div>`;
+}
+
+async function decide(id, what) {
+  try { const r = await api(`/api/actions/${id}/${what}`, {method: "POST"});
+    toast(what === "approve" ? (r.status === "completed" ? "Approved and done" : "Approved") : "Declined");
+  } catch (e) { toast(e.message); }
+  load();
+}
+async function toggleFreeze() { await api("/api/policy", {method: "PATCH", body: JSON.stringify({frozen: !state.policy.frozen})}); toast(state.policy.frozen ? "Spending resumed" : "All spending paused"); load(); }
+async function clearLock() { await api("/api/scam-lock/clear", {method: "POST"}); toast("Scam lock lifted"); load(); }
+async function saveLimits() {
+  const body = {}; for (const f of ["auto_spend_limit", "monthly_auto_budget", "hard_cap", "scam_lock_minutes"]) body[f] = parseInt(document.getElementById(f).value, 10);
+  try { await api("/api/policy", {method: "PATCH", body: JSON.stringify(body)}); toast("Limits saved"); } catch (e) { toast(e.message); }
+  load();
+}
+load(); setInterval(load, 3000);
+</script>
+</body>
+</html>

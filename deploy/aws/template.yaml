@@ -1,0 +1,141 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  Bharosa on AWS - Amazon ECS Express Mode (container + HTTPS load balancer),
+  Amazon DynamoDB (state), Amazon SNS (guardian SMS) and Amazon Bedrock (scam second opinion).
+
+Parameters:
+  ImageUri:
+    Type: String
+    Description: ECR image URI, e.g. 123456789012.dkr.ecr.ap-south-1.amazonaws.com/bharosa:latest
+  BaseUrl:
+    Type: String
+    Default: ""
+    Description: Public https URL of the service. Leave empty on first deploy, then update with the Endpoint output.
+  AdminToken:
+    Type: String
+    NoEcho: true
+    Default: ""
+    Description: If set, creating households (the /setup page) requires this token.
+  EnableSmsAlerts:
+    Type: String
+    AllowedValues: ["true", "false"]
+    Default: "false"
+  BedrockModelId:
+    Type: String
+    Default: ""
+    Description: Optional Bedrock model/inference profile id for the scam judge (e.g. apac.amazon.nova-lite-v1:0).
+  ElevenLabsApiKey:
+    Type: String
+    NoEcho: true
+    Default: ""
+  ElevenLabsParentAgentId:
+    Type: String
+    Default: ""
+  ElevenLabsPharmacyAgentId:
+    Type: String
+    Default: ""
+  ElevenLabsPhoneNumberId:
+    Type: String
+    Default: ""
+  ElevenLabsWebhookSecret:
+    Type: String
+    NoEcho: true
+    Default: ""
+  CallChannel:
+    Type: String
+    AllowedValues: ["simulated", "elevenlabs"]
+    Default: "simulated"
+    Description: Use "elevenlabs" once the ElevenLabs values above are filled in.
+
+Resources:
+  Table:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "${AWS::StackName}-bharosa"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - { AttributeName: pk, AttributeType: S }
+        - { AttributeName: sk, AttributeType: S }
+      KeySchema:
+        - { AttributeName: pk, KeyType: HASH }
+        - { AttributeName: sk, KeyType: RANGE }
+      PointInTimeRecoverySpecification: { PointInTimeRecoveryEnabled: true }
+      SSESpecification: { SSEEnabled: true }
+
+  ExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - { Effect: Allow, Principal: { Service: ecs-tasks.amazonaws.com }, Action: sts:AssumeRole }
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+
+  InfrastructureRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - { Effect: Allow, Principal: { Service: ecs.amazonaws.com }, Action: sts:AssumeRole }
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSInfrastructureRoleforExpressGatewayServices
+
+  TaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - { Effect: Allow, Principal: { Service: ecs-tasks.amazonaws.com }, Action: sts:AssumeRole }
+      Policies:
+        - PolicyName: bharosa-app
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: [dynamodb:GetItem, dynamodb:PutItem, dynamodb:Query, dynamodb:Scan]
+                Resource: !GetAtt Table.Arn
+              - Effect: Allow                     # SMS to phone numbers has no resource ARN
+                Action: sns:Publish
+                Resource: "*"
+              - Effect: Allow
+                Action: [bedrock:InvokeModel]
+                Resource: "*"
+
+  Service:
+    Type: AWS::ECS::ExpressGatewayService
+    Properties:
+      ServiceName: !Sub "${AWS::StackName}-bharosa"
+      InfrastructureRoleArn: !GetAtt InfrastructureRole.Arn
+      ExecutionRoleArn: !GetAtt ExecutionRole.Arn
+      TaskRoleArn: !GetAtt TaskRole.Arn
+      HealthCheckPath: /health
+      Cpu: "512"
+      Memory: "1024"
+      PrimaryContainer:
+        Image: !Ref ImageUri
+        ContainerPort: 8000
+        Environment:
+          - { Name: BHAROSA_STORE, Value: dynamodb }
+          - { Name: BHAROSA_DYNAMODB_TABLE, Value: !Ref Table }
+          - { Name: AWS_REGION, Value: !Ref "AWS::Region" }
+          - { Name: BHAROSA_BASE_URL, Value: !Ref BaseUrl }
+          - { Name: BHAROSA_ADMIN_TOKEN, Value: !Ref AdminToken }
+          - { Name: BHAROSA_SNS_SMS, Value: !Ref EnableSmsAlerts }
+          - { Name: BHAROSA_BEDROCK_MODEL_ID, Value: !Ref BedrockModelId }
+          - { Name: BHAROSA_PHARMACY_CHANNEL, Value: !Ref CallChannel }
+          - { Name: BHAROSA_CALLBACK_CHANNEL, Value: !Ref CallChannel }
+          - { Name: ELEVENLABS_API_KEY, Value: !Ref ElevenLabsApiKey }
+          - { Name: ELEVENLABS_PARENT_AGENT_ID, Value: !Ref ElevenLabsParentAgentId }
+          - { Name: ELEVENLABS_PHARMACY_AGENT_ID, Value: !Ref ElevenLabsPharmacyAgentId }
+          - { Name: ELEVENLABS_PHONE_NUMBER_ID, Value: !Ref ElevenLabsPhoneNumberId }
+          - { Name: ELEVENLABS_WEBHOOK_SECRET, Value: !Ref ElevenLabsWebhookSecret }
+
+Outputs:
+  Endpoint:
+    Description: Service endpoint. Re-deploy with BaseUrl=https://<this endpoint>.
+    Value: !GetAtt Service.Endpoint
+  TableName:
+    Value: !Ref Table
