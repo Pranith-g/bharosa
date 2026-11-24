@@ -456,8 +456,12 @@ class BharosaService:
         # Re-check hard rules at approval time: a freeze or scam lock since the request still wins.
         if hh.policy.frozen or self._scam_locked(hh):
             act.status = "blocked"
+            act.updated_at = self.clock()
             self.store.put_action(act)
             self._event(hh.id, "action_blocked", f"Not executed (spending paused): {act.title}", "warning", act.id)
+            # Don't leave the parent waiting for a call-back that would never come.
+            self._callback(hh, messages.say("denied_frozen" if hh.policy.frozen else "denied_locked",
+                                            hh.parent_language, guardian=hh.guardian.name), act)
             return {"ok": False, "status": "blocked", "error": "spending is paused or scam-locked"}
         self._event(hh.id, "approval_granted", f"You approved: {act.title}", "success", act.id)
         return self._execute(hh, act, after_approval=True)

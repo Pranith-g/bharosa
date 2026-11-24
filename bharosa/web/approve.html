@@ -14,7 +14,7 @@
   <div class="card" id="card"><div class="empty">Loading…</div></div>
 </main>
 <script>
-const [, , hh, aid] = location.pathname.split("/");
+const [hh, aid] = location.pathname.split("/").filter(Boolean).slice(-2);   // works at /a/... and /classic/a/...
 const t = new URLSearchParams(location.search).get("t") || "";
 function esc(s) { return String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
 const card = document.getElementById("card");

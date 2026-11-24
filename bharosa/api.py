@@ -22,6 +22,7 @@ from .store import make_store
 
 log = logging.getLogger(__name__)
 WEB = Path(__file__).parent / "web"
+DIST = WEB / "dist"
 
 
 def build_service() -> BharosaService:
@@ -72,13 +73,32 @@ def create_app(svc: BharosaService | None = None) -> FastAPI:
     def health() -> dict:
         return {"ok": True, "store": settings().store, "pharmacy": svc.pharmacy.name, "voice": svc.voice.name}
 
-    for route, page in {"/": "index.html", "/g": "guardian.html", "/p": "simulator.html",
-                        "/setup": "setup.html"}.items():
-        app.add_api_route(route, (lambda p=page: FileResponse(WEB / p)), methods=["GET"], include_in_schema=False)
+    # The React app (frontend/ -> `npm run build` -> web/dist) serves the main routes when it has been built.
+    # The original vanilla pages stay available under /classic/... (and serve the main routes if dist is missing).
+    classic = {"/": "index.html", "/g": "guardian.html", "/p": "simulator.html", "/setup": "setup.html"}
+    for route, page in classic.items():
+        app.add_api_route(f"/classic{route.rstrip('/')}", (lambda p=page: FileResponse(WEB / p)),
+                          methods=["GET"], include_in_schema=False)
+    app.add_api_route("/classic/", lambda: FileResponse(WEB / "index.html"), methods=["GET"], include_in_schema=False)
+    app.add_api_route("/classic/a/{hh_id}/{action_id}", lambda hh_id, action_id: FileResponse(WEB / "approve.html"),
+                      methods=["GET"], include_in_schema=False)
 
-    @app.get("/a/{hh_id}/{action_id}", include_in_schema=False)
-    def approval_page(hh_id: str, action_id: str):
-        return FileResponse(WEB / "approve.html")
+    spa_index = DIST / "index.html"
+    if spa_index.exists():
+        if (DIST / "assets").is_dir():
+            app.mount("/assets", StaticFiles(directory=DIST / "assets"), name="assets")
+        for f in DIST.iterdir():                       # icon.svg, manifest.webmanifest, ...
+            if f.is_file() and f.name != "index.html":
+                app.add_api_route(f"/{f.name}", (lambda f=f: FileResponse(f)), methods=["GET"], include_in_schema=False)
+        spa = lambda: FileResponse(spa_index, headers={"Cache-Control": "no-cache"})  # noqa: E731
+        for route in ("/", "/g", "/p", "/setup", "/demo"):
+            app.add_api_route(route, spa, methods=["GET"], include_in_schema=False)
+        app.add_api_route("/a/{hh_id}/{action_id}", lambda hh_id, action_id: spa(), methods=["GET"], include_in_schema=False)
+    else:
+        for route, page in classic.items():
+            app.add_api_route(route, (lambda p=page: FileResponse(WEB / p)), methods=["GET"], include_in_schema=False)
+        app.add_api_route("/a/{hh_id}/{action_id}", lambda hh_id, action_id: FileResponse(WEB / "approve.html"),
+                          methods=["GET"], include_in_schema=False)
 
     # ------------------------------------------------------------------ guardian API
     @app.get("/api/state")

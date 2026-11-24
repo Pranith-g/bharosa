@@ -112,3 +112,11 @@ def test_elevenlabs_webhook_completes_pharmacy_order(client, env, monkeypatch):
     assert ok.json()["status"] == "completed"
     act = svc.store.get_action(hh.id, aid)
     assert act.amount == 176 and act.status == "completed"
+
+
+def test_ui_routes_and_classic_pages(client):
+    for path in ["/", "/g", "/p", "/setup", "/a/hh_x/act_y", "/classic", "/classic/g", "/classic/p",
+                 "/classic/setup", "/classic/a/hh_x/act_y"]:
+        r = client.get(path)
+        assert r.status_code == 200, path
+        assert "text/html" in r.headers["content-type"], path

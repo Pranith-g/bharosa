@@ -148,3 +148,12 @@ def test_intent_router_all_languages(env):
     assert intent.handle(svc, hh, "Tell Ravi to call me tonight")["tool"] == "message_family"
     assert intent.handle(svc, hh, "ಏನಾಯ್ತು?")["tool"] == "check_request_status"
     assert intent.handle(svc, hh, "CBI ಇಂದ ಫೋನ್ ಬಂತು, ದುಡ್ಡು ಕಳಿಸಬೇಕಂತೆ")["tool"] == "report_suspicious_call"
+
+
+def test_blocked_at_approval_calls_parent_back(env):
+    svc, hh, voice = env["svc"], env["hh"], env["voice"]
+    r = svc.pay_bill(hh.id, "gas", "pay gas")
+    svc.update_policy(hh.id, {"frozen": True})
+    before = len(voice.calls)
+    assert svc.approve(hh.id, r["request_id"])["status"] == "blocked"
+    assert len(voice.calls) == before + 1          # the parent hears it won't happen

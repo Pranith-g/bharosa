@@ -1,0 +1,11 @@
+{
+  "name": "Bharosa guardian",
+  "short_name": "Bharosa",
+  "description": "Approve, pause and watch over your parent's Bharosa line.",
+  "start_url": "/g",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f6f4ef",
+  "theme_color": "#0f5c4d",
+  "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}
