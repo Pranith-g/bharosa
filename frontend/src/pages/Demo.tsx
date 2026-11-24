@@ -136,6 +136,15 @@ export default function DemoPage() {
           <h1 className="max-w-2xl text-4xl font-extrabold tracking-tight">Two phones, one gateway, live.</h1>
           <p className="max-w-xl text-lg text-muted">Creates a fresh demo family (Lakshmi and her son Ravi) and opens both phones side by side.</p>
           <Button size="xl" onClick={() => reset()} busy={busy} data-testid="demo-create">Create a demo family</Button>
+          <ol className="mt-8 grid w-full max-w-3xl gap-3 text-left sm:grid-cols-3">
+            {SCENES.map((sc, n) => (
+              <li key={sc.id} className="rounded-2xl border border-line bg-card p-4">
+                <span className={`flex size-8 items-center justify-center rounded-full text-sm font-bold num ${["bg-brand text-white", "bg-saffron text-ink", "bg-danger text-white"][n]}`}>{n + 1}</span>
+                <b className="mt-3 block">{sc.title}</b>
+                <span className="text-[15px] text-muted">{sc.outcome}</span>
+              </li>
+            ))}
+          </ol>
         </div>
       ) : (
         <main className="grid min-h-0 flex-1 grid-cols-1 gap-6 overflow-y-auto px-6 pb-6 lg:grid-cols-[auto_minmax(280px,1fr)_auto] lg:overflow-hidden">

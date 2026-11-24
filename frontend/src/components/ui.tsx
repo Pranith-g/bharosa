@@ -34,9 +34,9 @@ export function Logo({ light, small }: { light?: boolean; small?: boolean }) {
   return (
     <Link to="/" className={`inline-flex items-center gap-2.5 no-underline ${light ? "text-white" : "text-ink"}`}>
       <img src="/icon.svg" alt="" className={small ? "size-7" : "size-9"} />
-      <span className={`font-extrabold tracking-tight ${small ? "text-lg" : "text-xl"}`}>
+      <span className={`whitespace-nowrap font-extrabold tracking-tight ${small ? "text-lg" : "text-xl"}`}>
         Bharosa
-        <span className={`ml-2 font-semibold ${light ? "text-[#f6c27a]" : "text-saffron-ink"} ${small ? "text-sm" : "text-base"}`}>ಭರೋಸಾ · भरोसा</span>
+        <span className={`ml-2 hidden font-semibold min-[400px]:inline ${light ? "text-[#f6c27a]" : "text-saffron-ink"} ${small ? "text-sm" : "text-base"}`}>ಭರೋಸಾ · भरोसा</span>
       </span>
     </Link>
   );
