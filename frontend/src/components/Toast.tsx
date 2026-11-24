@@ -16,7 +16,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <Ctx.Provider value={push}>
       {children}
-      <div aria-live="polite" className="pointer-events-none fixed inset-x-0 bottom-5 z-50 flex flex-col items-center gap-2 px-4"
+      <div aria-live="polite" className="pointer-events-none fixed inset-x-0 bottom-24 z-50 md:bottom-6 flex flex-col items-center gap-2 px-4"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}>
         {toasts.map((t) => {
           const Icon = t.tone === "ok" ? CircleCheck : t.tone === "bad" ? CircleAlert : Info;

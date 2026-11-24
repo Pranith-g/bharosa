@@ -20,7 +20,7 @@ const TABS: { id: Tab; label: string; icon: typeof House }[] = [
   { id: "connect", label: "Connect", icon: Plug },
 ];
 
-export interface GuardianHandle { approveFirst: () => Promise<boolean>; refresh: () => void }
+export interface GuardianHandle { apiKey: string; pendingCount: () => number; approveFirst: () => Promise<boolean>; refresh: () => void }
 
 export const GuardianApp = forwardRef<GuardianHandle, {
   apiKey: string; compact?: boolean; onUnauthorized?: () => void; onForget?: () => void;
@@ -59,6 +59,8 @@ export const GuardianApp = forwardRef<GuardianHandle, {
   const pending = (st?.pending || []).filter((a) => !hidden[a.id]);
 
   useImperativeHandle(ref, () => ({
+    apiKey,
+    pendingCount: () => pending.length,
     approveFirst: async () => {
       const first = pending[0];
       if (!first) return false;
@@ -67,7 +69,7 @@ export const GuardianApp = forwardRef<GuardianHandle, {
       return true;
     },
     refresh,
-  }), [pending, decide, refresh]);
+  }), [apiKey, pending, decide, refresh]);
 
   const run = async (label: string, fn: () => Promise<unknown>, okMsg: string): Promise<boolean> => {
     setBusy(label);
@@ -118,7 +120,7 @@ export const GuardianApp = forwardRef<GuardianHandle, {
     <div className="flex h-full min-h-0 flex-col bg-paper" data-testid="guardian-app">
       <header className="bg-brand text-white" style={compact ? undefined : { paddingTop: "env(safe-area-inset-top)" }}>
         <div className={`mx-auto flex w-full max-w-5xl items-center gap-3 ${compact ? "px-4 pb-3 pt-8" : "px-5 py-3.5"}`}>
-          {compact ? <span className="text-lg font-extrabold">Bharosa</span> : <div className="hidden sm:block"><Logo light small /></div>}
+          {!compact && <div className="hidden sm:block"><Logo light small /></div>}
           <div className="min-w-0 leading-tight">
             <div className="truncate text-[15px] font-semibold">{hh.guardian.name}</div>
             <div className="truncate text-[13px] text-white/75">looking after {hh.parent_name}</div>
@@ -133,8 +135,8 @@ export const GuardianApp = forwardRef<GuardianHandle, {
           {tab === "home" && (
             <>
               <ScamBanner state={st} onAddPhone={() => openTab("family")} />
-              <div className={compact ? "space-y-4" : "grid gap-4 lg:grid-cols-[1.25fr_1fr]"}>
-                <div className="space-y-4">
+              <div className={compact ? "space-y-4" : "grid items-start gap-4 lg:grid-cols-[1.25fr_1fr]"}>
+                <div className="space-y-4 lg:col-start-1">
                   {pending.length ? (
                     pending.map((a) => (
                       <ApprovalCard key={a.id} action={a} parentName={hh.parent_name} lang={hh.parent_language} compact={compact}
@@ -149,16 +151,8 @@ export const GuardianApp = forwardRef<GuardianHandle, {
                       </div>
                     </Card>
                   )}
-                  {!compact && (
-                    <Card>
-                      <SectionTitle icon={<History size={20} />} aside={<button onClick={() => openTab("activity")} className="text-sm font-semibold text-brand">See all</button>}>
-                        Latest
-                      </SectionTitle>
-                      <Timeline events={st.events} limit={6} />
-                    </Card>
-                  )}
                 </div>
-                <div className="space-y-4">
+                <div className="space-y-4 lg:col-start-2 lg:row-span-2 lg:row-start-1">
                   <PauseToggle frozen={st.policy.frozen} busy={busy === "freeze"}
                     onToggle={() => run("freeze", () => api.patchPolicy({ frozen: !st.policy.frozen }), st.policy.frozen ? "Spending resumed" : "All spending paused")} />
                   <LockBox minutes={st.scam_lock_minutes_left} busy={busy === "lock"}
@@ -167,13 +161,13 @@ export const GuardianApp = forwardRef<GuardianHandle, {
                     <SectionTitle icon={<Wallet size={20} />}>This month</SectionTitle>
                     <SpendBar spent={st.spent_this_month} budget={st.policy.monthly_auto_budget} />
                   </Card>
-                  {compact && (
-                    <Card>
-                      <SectionTitle icon={<History size={20} />}>Latest</SectionTitle>
-                      <Timeline events={st.events} limit={4} />
-                    </Card>
-                  )}
                 </div>
+                <Card className="lg:col-start-1">
+                  <SectionTitle icon={<History size={20} />} aside={<button onClick={() => openTab("activity")} className="text-sm font-semibold text-brand">See all</button>}>
+                    Latest
+                  </SectionTitle>
+                  <Timeline events={st.events} limit={compact ? 4 : 6} />
+                </Card>
               </div>
             </>
           )}

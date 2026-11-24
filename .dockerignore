@@ -1,0 +1,10 @@
+.venv/
+**/__pycache__/
+*.db
+*.db-*
+.git/
+frontend/node_modules/
+frontend/e2e/.tmp/
+frontend/test-results/
+bharosa/web/dist/
+.env

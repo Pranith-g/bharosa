@@ -36,6 +36,7 @@ export interface ConnectInfo { base_url: string; elevenlabs_agent_id: string; ph
 export interface ApprovalInfo {
   parent: string; guardian: string; title: string; amount: number; status: ActionStatus; parent_said: string;
   reasons: string[]; risk_score: number; risk_signals: string[]; created_at: number; expires_at: number | null;
+  receipt?: string | null;
 }
 export interface SimSayResult {
   tool: string | null; reply: string;

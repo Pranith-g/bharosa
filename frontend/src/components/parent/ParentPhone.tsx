@@ -12,7 +12,7 @@ type Msg =
   | { id: string; who: "call"; text: string }
   | { id: string; who: "note"; text: string };
 
-export interface ParentHandle { say: (text: string) => Promise<SimSayResult | null>; chips: () => string[] }
+export interface ParentHandle { apiKey: string; ready: () => boolean; say: (text: string) => Promise<SimSayResult | null>; chips: () => string[] }
 
 /* Minimal typing for the Web Speech API (not in the DOM lib yet). */
 interface SR { lang: string; interimResults: boolean; maxAlternatives: number; start(): void; stop(): void;
@@ -95,7 +95,7 @@ export const ParentPhone = forwardRef<ParentHandle, { apiKey: string; onUnauthor
     }, [api, speak]);
 
     const chips = info ? CHIPS[info.language](info.guardian) : [];
-    useImperativeHandle(ref, () => ({ say, chips: () => chips.map((c) => c.text) }), [say, chips]);
+    useImperativeHandle(ref, () => ({ apiKey, ready: () => !!info, say, chips: () => chips.map((c) => c.text) }), [apiKey, info, say, chips]);
 
     const toggleMic = () => {
       const Ctor = getSR();
@@ -143,7 +143,7 @@ export const ParentPhone = forwardRef<ParentHandle, { apiKey: string; onUnauthor
           {msgs.map((m) => <Bubble key={m.id} m={m} />)}
           {busy && (
             <div className="flex w-16 items-center justify-center gap-1 rounded-2xl rounded-bl-md bg-white px-3 py-3 shadow-soft ring-1 ring-line">
-              {[0, 1, 2].map((i) => <span key={i} className="size-2 animate-bounce rounded-full bg-muted/60" style={{ animationDelay: `${i * 0.15}s` }} />)}
+              {[0, 1, 2].map((i) => <span key={i} className="size-2 animate-pulse rounded-full bg-muted/60" style={{ animationDelay: `${i * 0.15}s` }} />)}
             </div>
           )}
         </div>

@@ -107,7 +107,8 @@ function Outcome({ info }: { info: ApprovalInfo }) {
   switch (info.status) {
     case "completed":
       return <Final icon={<CircleCheckBig size={34} />} tone="ok" stamp="Paid" title={`Done.${amount} paid`}
-        body={`${title}. ${info.parent} has been called back with the receipt.`} extra={<CallNote parent={info.parent} />} />;
+        body={`${title}. ${info.parent} has been called back with the receipt.`}
+        extra={<>{info.receipt && <p className="mx-auto mt-4 w-fit rounded-xl bg-paper px-3 py-1.5 font-mono text-sm">Receipt {info.receipt}</p>}<CallNote parent={info.parent} /></>} />;
     case "awaiting_pharmacy":
       return <Final icon={<Truck size={32} />} tone="ok" stamp="Approved" title="Approved. Calling the pharmacy"
         body={`${title}. ${info.parent} gets a call back once the pharmacy confirms.`} />;
@@ -124,7 +125,7 @@ function Outcome({ info }: { info: ApprovalInfo }) {
 }
 
 function CallNote({ parent }: { parent: string }) {
-  return <p className="mt-4 inline-flex items-center gap-2 text-[15px] text-muted"><PhoneOutgoing size={17} /> Bharosa called {parent} back.</p>;
+  return <p className="mt-4 flex justify-center items-center gap-2 text-[15px] text-muted"><PhoneOutgoing size={17} /> Bharosa called {parent} back.</p>;
 }
 
 function Final({ icon, tone, title, body, stamp, extra }: { icon: ReactNode; tone: "ok" | "bad" | "muted"; title: string; body: string; stamp?: string; extra?: ReactNode }) {

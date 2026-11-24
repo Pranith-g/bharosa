@@ -38,10 +38,10 @@ export default function DemoPage() {
       setScene({});
       setCaption("");
       setLast(null);
-      return true;
+      return k;
     } catch (e) {
       toast(`Couldn't create a demo family: ${(e as Error).message}`, "bad");
-      return false;
+      return null;
     } finally {
       setBusy(false);
     }
@@ -63,8 +63,11 @@ export default function DemoPage() {
     cancel.current = false;
     setRunning(true);
     try {
-      if (!(await reset(lang))) return;
-      await waitFor(() => !!parent.current?.chips().length, 8000);
+      const k = await reset(lang);
+      if (!k) return;
+      // Wait until both phones have re-mounted with the *new* family's keys and loaded.
+      await waitFor(() => parent.current?.apiKey === k.p && parent.current.ready() && guardian.current?.apiKey === k.g, 10000);
+      await sleep(800);
       const chips = CHIPS[lang]("Ravi").map((c) => c.text);
       const say = async (i: number) => {
         const r = await parent.current?.say(chips[i]);
@@ -81,11 +84,13 @@ export default function DemoPage() {
       setScene({ auto: "done", approve: "running" });
       setCaption("Now the electricity bill: ₹2,392. That's over Ravi's ₹500 limit, so it waits for his tap.");
       await say(SCENES[1].chip);
-      await untilQuiet();
-      await sleep(1200);
-      setCaption("Ravi approves on his phone. Bharosa pays, then calls Lakshmi back with the receipt.");
       guardian.current?.refresh();
+      await waitFor(() => (guardian.current?.pendingCount() || 0) > 0, 8000);
+      await untilQuiet();
+      setCaption("Ravi sees the amount, her own words, and why he's asked. He taps Approve.");
+      await sleep(3500);
       await waitFor(async () => !!(await guardian.current?.approveFirst()), 10000);
+      setCaption("Bharosa pays the bill, then calls Lakshmi back with the receipt.");
       await sleep(4500);
       await untilQuiet();
 
@@ -134,7 +139,7 @@ export default function DemoPage() {
         </div>
       ) : (
         <main className="grid min-h-0 flex-1 grid-cols-1 gap-6 overflow-y-auto px-6 pb-6 lg:grid-cols-[auto_minmax(280px,1fr)_auto] lg:overflow-hidden">
-          <PhoneFrame label="Lakshmi · parent" className="mx-auto h-[min(860px,calc(100dvh-110px))] min-h-[600px] w-[min(400px,calc((100dvh-110px)*0.47))] min-w-[320px]">
+          <PhoneFrame label="Lakshmi · parent" className="mx-auto h-[min(860px,calc(100dvh-110px))] min-h-[600px] w-[min(440px,calc((100dvh-110px)*0.5))] min-w-[320px]">
             <ParentPhone key={keys.p} ref={parent} apiKey={keys.p} />
           </PhoneFrame>
 
@@ -168,7 +173,7 @@ export default function DemoPage() {
             </div>
           </section>
 
-          <PhoneFrame label="Ravi · guardian" className="mx-auto h-[min(860px,calc(100dvh-110px))] min-h-[600px] w-[min(400px,calc((100dvh-110px)*0.47))] min-w-[320px]">
+          <PhoneFrame label="Ravi · guardian" className="mx-auto h-[min(860px,calc(100dvh-110px))] min-h-[600px] w-[min(440px,calc((100dvh-110px)*0.5))] min-w-[320px]">
             <GuardianApp key={keys.g} ref={guardian} apiKey={keys.g} compact />
           </PhoneFrame>
         </main>

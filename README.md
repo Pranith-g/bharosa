@@ -15,9 +15,15 @@ Every tool call goes through a deterministic **policy engine** that the family g
 
 **No LLM can approve a spend.** Approval is not an MCP tool; a human taps it on their own phone.
 
-| Guardian dashboard | One-tap approval (phone) | Parent line simulator |
+![Demo stage: parent's phone and guardian's phone side by side](docs/screenshots/7_demo_stage.png)
+
+| Guardian app (phone) | One-tap approval | Scam lock |
 |---|---|---|
-| ![](docs/screenshots/1_guardian_pending.png) | ![](docs/screenshots/2_approval_link_mobile.png) | ![](docs/screenshots/4_parent_simulator.png) |
+| ![](docs/screenshots/1b_guardian_mobile.png) | ![](docs/screenshots/2_approval_link_mobile.png) | ![](docs/screenshots/5_guardian_scam_lock.png) |
+
+| Guardian dashboard (desktop) | Parent line simulator |
+|---|---|
+| ![](docs/screenshots/1_guardian_pending.png) | ![](docs/screenshots/4_parent_simulator.png) |
 
 ---
 
@@ -28,7 +34,7 @@ Every tool call goes through a deterministic **policy engine** that the family g
 | MCP gateway: 7 parent tools + 3 read-only guardian tools, MCP Python SDK 2.3, streamable HTTP | ✅ Real, tested with the official MCP client over HTTP |
 | Policy engine: tiers, per-spend limit, monthly budget, hard cap, new-payee rule, freeze, scam lock, expiry, duplicate protection | ✅ Real, unit-tested |
 | Scam detection: Kannada/Hindi/English rules + optional Amazon Bedrock second opinion | ✅ Real (Bedrock is optional, behind a flag) |
-| Guardian dashboard, one-tap approval links, onboarding page, parent simulator (with browser speech in/out) | ✅ Real |
+| Web app (React + Vite + TypeScript + Tailwind): guardian app, one-tap approval links, setup wizard with QR codes, parent simulator (browser speech in/out), 16:9 demo stage | ✅ Real, Playwright smoke-tested |
 | Storage: SQLite (local) and DynamoDB single-table (AWS) | ✅ Real; DynamoDB tested against moto |
 | Guardian alerts: ntfy push (free app) and Amazon SNS SMS | ✅ Implemented; needs network and accounts |
 | Phone calls: ElevenLabs outbound calls to the pharmacy and parent call-backs, plus the signed post-call webhook | ✅ Implemented; needs an ElevenLabs account and phone number. Webhook signature checks are tested |
@@ -40,19 +46,27 @@ Every tool call goes through a deterministic **policy engine** that the family g
 ## Run it locally (2 minutes)
 
 ```bash
-python3 -m venv .venv && . .venv/bin/activate
+python3 -m venv .venv && . .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -r requirements-dev.txt
-python -m bharosa.cli serve            # http://localhost:8000
+cd frontend && npm install && npm run build && cd ..  # builds the web app into bharosa/web/dist
+python -m bharosa.cli serve                           # http://localhost:8000
 ```
 
-Open **http://localhost:8000/setup**, click **Fill with demo data**, then **Create**. You get four private links:
+Open **http://localhost:8000/setup**, click **Fill with demo data**, step through, then **Create**. You get four private links (with QR codes):
 
-- **Guardian dashboard**: open it on your phone or in a second tab
-- **Parent line simulator**: talk (Chrome mic) or tap the suggested phrases
+- **Guardian app** (`/g`): open it on your phone; it installs like an app
+- **Parent line simulator** (`/p`): talk (Chrome mic) or tap the suggested phrases
 - **Parent MCP URL**: paste this into the ElevenLabs agent
 - **Guardian MCP URL**: read-only; add it to Claude or any MCP client
 
+**On stage:** open **http://localhost:8000/demo** for both phones side by side on one 16:9 screen. **Run scripted demo** plays the three scenes
+(BP tablets → auto, electricity bill → guardian approves → call-back, CBI scam → lock) on a fresh family; **Reset** makes a new one.
+Keys can also be passed as `/demo#g=bg_…&p=bp_…` (the `#` part never reaches the server, and the page removes it at once).
+
 Or from the terminal: `python -m bharosa.cli demo` prints the links for a ready-made family (Lakshmi & Ravi).
+Without a frontend build, the server falls back to the original vanilla pages, which also stay available at `/classic/…`.
+
+**Frontend development:** run the server, then `cd frontend && npm run dev` (http://localhost:5173, with API calls proxied to :8000).
 
 **Scripted end-to-end check** (acts like the voice agent over real MCP):
 
@@ -60,7 +74,11 @@ Or from the terminal: `python -m bharosa.cli demo` prints the links for a ready-
 python scripts/demo_walkthrough.py http://localhost:8000
 ```
 
-**Tests:** `python -m pytest -q` runs 49 tests: policy, scam detection, service flows, the HTTP API, webhook signatures, MCP end to end over HTTP, and DynamoDB.
+**Tests**
+- `python -m pytest -q` runs 51 tests: policy, scam detection, service flows, the HTTP API and page routes, webhook signatures, MCP end to end over HTTP, and DynamoDB.
+- `cd frontend && npm run build && npm run test:e2e` runs Playwright smoke tests in headless Chrome: setup → simulator → guardian approves → call-back →
+  scam lock (at 360 px), the one-tap approval link, the 1920×1080 demo stage, and no console errors or sideways scrolling.
+  `SHOTS=1 npx playwright test screenshots` regenerates `docs/screenshots`.
 
 ---
 
@@ -132,7 +150,7 @@ ElevenLabs Agent (voice, turn-taking, language)          Guardian's Claude / any
 
 **Security model**
 - Keys are random, stored only as SHA-256 hashes, and scoped by role. The parent key can request actions; the guardian key can read, approve and change limits.
-- Dashboard links carry the key in the URL `#fragment`, so it never reaches server logs, and the page strips it after load.
+- Dashboard links carry the key in the URL `#fragment`, so it never reaches server logs. The page moves it to local storage and strips it from the address bar at once. "Forget this device" removes it.
 - Approval links are per-request tokens. They're single-use (the status change locks them) and expire.
 - At approval time, a freeze or scam lock still wins over an earlier request.
 - Tool results carry reviewed `say_to_parent` text, so money and safety messages don't depend on the LLM's own phrasing.
@@ -170,9 +188,11 @@ bharosa/
   billing.py       BBPS sandbox
   store/           SQLite and DynamoDB stores
   intent.py        offline router for the simulator / demo fallback
-  web/             dashboard, approval page, simulator, setup, landing
+  web/dist/        built React app (from frontend/), served at /, /g, /p, /setup, /demo, /a/...
+  web/*.html       original vanilla pages, kept at /classic/...
+frontend/          React + Vite + TypeScript + Tailwind source; e2e/ has the Playwright tests
 deploy/aws/        CloudFormation (ECS Express, DynamoDB, IAM) + deploy.sh
 deploy/elevenlabs/ agent prompts, data-collection config, MCP registration helper
-scripts/           end-to-end walkthrough
-tests/             49 tests
+scripts/           end-to-end walkthrough, approval-link helper for tests
+tests/             51 tests
 ```

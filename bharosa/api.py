@@ -152,7 +152,8 @@ def create_app(svc: BharosaService | None = None) -> FastAPI:
         return {"parent": hh.parent_name, "guardian": hh.guardian.name, "title": act.title,
                 "amount": act.amount, "status": act.status, "parent_said": act.parent_said,
                 "reasons": act.decision.reasons if act.decision else [], "risk_score": act.risk_score,
-                "risk_signals": act.risk_signals, "created_at": act.created_at, "expires_at": act.expires_at}
+                "risk_signals": act.risk_signals, "created_at": act.created_at, "expires_at": act.expires_at,
+                "receipt": (act.result or {}).get("receipt")}   # additive: shown on the final "paid" screen
 
     @app.post("/api/approval/{hh_id}/{action_id}")
     def approval_decide(hh_id: str, action_id: str, body: dict[str, Any] = Body(...)) -> dict:
